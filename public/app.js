@@ -29,8 +29,8 @@
   const tr = (animate) => (animate && !reduceMotion ? d3.transition().duration(DUR).ease(ease) : null);
 
   let D; // aufbereitete Daten
-  const state = { bl: -1, kw: [true, true, true, true], ref: "da", from: 2015, to: 2026, mapT: 0, pampaKm: 10 };
-  const PAMPA_MONTHS = 3;
+  const state = { bl: -1, kw: [true, true, true, true], ref: "da", from: 2015, to: 2026, mapT: 0, pampaKm: 5 };
+  const PAMPA_MONTHS = 3, PAMPA_KW = 150, PAMPA_LP = 4;
   let DEFAULT_FROM = 2015;
 
   const $ = (s) => document.querySelector(s);
@@ -1009,7 +1009,7 @@
   }
 
   // --------------------------------------------------------------------------
-  // Pampa: alle Parks der letzten drei Monate mit Abstand >= Schwelle
+  // Pampa: Schnellladeparks (>= 150 kW, >= 4 LP) der letzten drei Monate mit Abstand >= Schwelle
   // --------------------------------------------------------------------------
   function renderPampa() {
     const PAMPA_ROW = innerWidth < 720 ? 78 : 64;
@@ -1017,7 +1017,7 @@
     const m0 = D.lastM - PAMPA_MONTHS + 1, minD = state.pampaKm * 1000;
     const top = [];
     for (let i = 0; i < P.n; i++) {
-      if (P.m[i] < m0 || dist[i] < minD || !inBl(P.bl[i]) || !state.kw[P.pc[i]]) continue;
+      if (P.m[i] < m0 || dist[i] < minD || P.kw[i] < PAMPA_KW || P.lp[i] < PAMPA_LP || !inBl(P.bl[i])) continue;
       top.push(i);
     }
     top.sort((a, b) => dist[b] - dist[a]);
@@ -1057,7 +1057,8 @@
       if (map.focus != null) document.querySelector(".block-map").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
     }).on("pointermove", (ev, i) => showTip(parkTip(i), ev)).on("pointerleave", hideTip);
     $("#pampa-empty").style.display = top.length ? "none" : "block";
-    $("#pampa-empty").textContent = `Kein Ladepark im Zeitraum mit mindestens ${state.pampaKm} km Abstand. Regler nach links schieben.`;
+    $("#pampa-empty").textContent = state.pampaKm > 5 ? `Kein Schnellladepark im Zeitraum mit mindestens ${state.pampaKm} km Abstand. Regler nach links schieben.`
+      : "Kein Schnellladepark im Zeitraum mit mindestens 5 km Abstand.";
   }
 
   // --------------------------------------------------------------------------

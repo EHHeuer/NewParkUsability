@@ -9,7 +9,7 @@ Statische Seite ohne Build-Schritt: HTML, CSS, D3.js (lokal eingebunden) und ein
 - **Kennzahlen**: Ladepunkte gesamt, DC-Ladepunkte, DC-Ladeleistung, Median-Abstand neuer DC-Punkte
 - **Abstand je Quartal**: Median und mittlere 50 % der Distanz neuer DC-Ladeparks zum bestehenden DC-Netz
 - **Betreiber-Ranking**: die 15 größten DC-Betreiber (heutiger Bestand) nach Anteil ihrer neuen Parks der letzten 12 Monate in der Fläche (> 2 km)
-- **Pampa-Liste**: alle Ladeparks der letzten drei Monate mit mindestens 5 bis 30 km Abstand zum bestehenden DC-Netz (Regler)
+- **Pampa-Liste**: Schnellladeparks (≥ 150 kW, ≥ 4 LP) der letzten drei Monate mit mindestens 5 bis 30 km Abstand zum bestehenden DC-Netz (Regler)
 - **Klassenanteile je Jahr**: Erweiterung (< 300 m), Verdichtung (0,3–2 km), Lückenschluss (2–10 km), neue Fläche (> 10 km)
 - **Karte** mit Zeitraffer des Ausbaus
 - **Versorgungsdistanz**: Entfernung von bewohnten 5-km-Rasterzellen zum nächsten DC-Lader je Jahresende
