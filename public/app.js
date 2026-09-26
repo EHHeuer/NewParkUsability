@@ -29,7 +29,8 @@
   const tr = (animate) => (animate && !reduceMotion ? d3.transition().duration(DUR).ease(ease) : null);
 
   let D; // aufbereitete Daten
-  const state = { bl: -1, kw: [true, true, true, true], ref: "da", from: 2015, to: 2026, mapT: 0 };
+  const state = { bl: -1, kw: [true, true, true, true], ref: "da", from: 2015, to: 2026, mapT: 0, pampaKm: 10 };
+  const PAMPA_MONTHS = 3;
   let DEFAULT_FROM = 2015;
 
   const $ = (s) => document.querySelector(s);
@@ -974,13 +975,15 @@
   // --------------------------------------------------------------------------
   // Betreiber-Ranking: Fläche oder Bestand?
   // --------------------------------------------------------------------------
-  const MIN_PARKS = 10;
+  const MIN_PARKS = 5;
+  const RANK_MONTHS = 12;
   function renderOpRank() {
     const cls = clsArr(), dist = distArr();
     const rows = new Map(D.topOps.map((op) => [op, { c: [0, 0, 0, 0], d: [] }]));
+    const m0 = D.lastM - RANK_MONTHS + 1;
     for (const i of selPark()) {
       const r = rows.get(D.P.op[i]);
-      if (!r || D.P.yr[i] < state.from || D.P.yr[i] > state.to) continue;
+      if (!r || D.P.m[i] < m0) continue;
       r.c[cls[i]] += 1;
       if (dist[i] >= 0) r.d.push(dist[i]);
     }
@@ -1001,24 +1004,27 @@
         d3.range(3, -1, -1).map((k) => ttRow(CLASS_NAMES[k], `${fmtPct(r.c[k] / r.n)} · ${fmtInt(r.c[k])}`, COL.cls[k])).join("") +
         ttRow("Median-Abstand", fmtDist(r.med)) + ttRow("Neue Ladeparks", fmtInt(r.n)),
     });
-    $("#oprank-note").textContent = hidden ? `${hidden} der 15 größten Betreiber mit weniger als ${MIN_PARKS} neuen Parks im Filter ausgeblendet.` : "";
+    $("#oprank-note").textContent = `Neue Parks ${mLabel(m0)} bis ${mLabel(D.lastM)}, unabhängig vom Zeitraumfilter.` +
+      (hidden ? ` ${hidden} der 15 größten Betreiber mit weniger als ${MIN_PARKS} neuen Parks ausgeblendet.` : "");
   }
 
   // --------------------------------------------------------------------------
-  // Top 10: Ladeparks am weitesten vom Bestand (>= 300 kW, >= 4 Ladepunkte)
+  // Pampa: alle Parks der letzten drei Monate mit Abstand >= Schwelle
   // --------------------------------------------------------------------------
   function renderPampa() {
     const PAMPA_ROW = innerWidth < 720 ? 78 : 64;
     const P = D.P, dist = distArr();
-    const cand = [];
+    const m0 = D.lastM - PAMPA_MONTHS + 1, minD = state.pampaKm * 1000;
+    const top = [];
     for (let i = 0; i < P.n; i++) {
-      if (P.kw[i] < 300 || P.lp[i] < 4 || !inBl(P.bl[i]) || P.yr[i] < state.from || P.yr[i] > state.to || dist[i] < 0) continue;
-      cand.push(i);
+      if (P.m[i] < m0 || dist[i] < minD || !inBl(P.bl[i]) || !state.kw[P.pc[i]]) continue;
+      top.push(i);
     }
-    cand.sort((a, b) => dist[b] - dist[a]);
-    const top = cand.slice(0, 10);
+    top.sort((a, b) => dist[b] - dist[a]);
+    $("#pampa-km-out").textContent = `ab ${state.pampaKm} km`;
+    $("#pampa-count").textContent = `${top.length} ${top.length === 1 ? "Ladepark" : "Ladeparks"} · eröffnet ${mLabel(m0)} bis ${mLabel(D.lastM)}`;
     if (map.focus != null && !top.includes(map.focus)) map.focus = null;
-    const max = top.length ? dist[top[0]] : 1;
+    const max = top.length ? Math.max(dist[top[0]], 20000) : 1;
     const box = d3.select("#c-pampa").style("height", `${Math.max(1, top.length) * PAMPA_ROW}px`);
     const rows = box.selectAll("button.pampa-row").data(top, (i) => i).join(
       (e) => {
@@ -1051,6 +1057,7 @@
       if (map.focus != null) document.querySelector(".block-map").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
     }).on("pointermove", (ev, i) => showTip(parkTip(i), ev)).on("pointerleave", hideTip);
     $("#pampa-empty").style.display = top.length ? "none" : "block";
+    $("#pampa-empty").textContent = `Kein Ladepark im Zeitraum mit mindestens ${state.pampaKm} km Abstand. Regler nach links schieben.`;
   }
 
   // --------------------------------------------------------------------------
@@ -1090,6 +1097,9 @@
 
     setupFilters(); syncFilters();
     initDist(); initClass(); initMap(); initCov(); initZubau(); initKw();
+    const pk = $("#pampa-km");
+    pk.value = state.pampaKm;
+    pk.addEventListener("input", () => { state.pampaKm = +pk.value; renderPampa(); });
     legend("#l-oprank", d3.range(3, -1, -1).map((i) => [CLASS_NAMES[i], COL.cls[i], CLASS_RANGES[i]]));
     layoutMap();
     update(false);

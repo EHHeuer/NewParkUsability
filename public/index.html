@@ -99,7 +99,7 @@
     <section class="block">
       <header class="block-head">
         <h2>Wer baut in die Fläche, wer an den Bestand?</h2>
-        <p class="block-lead">Die 15 größten DC-Betreiber, sortiert nach dem Anteil ihrer neuen Ladeparks, die mehr als 2 km vom bestehenden Netz entfernt eröffnet wurden. Rechts: dieser Anteil und der Median-Abstand.</p>
+        <p class="block-lead">Die 15 größten DC-Betreiber nach heutigem Bestand an DC-Ladepunkten, bewertet nach ihren Ladeparks der letzten 12 Monate. Oben steht, wer den größten Anteil neuer Parks mehr als 2 km vom bestehenden Netz entfernt eröffnet hat, unten, wer am stärksten verdichtet. Rechts: dieser Anteil und der Median-Abstand.</p>
       </header>
       <div class="legend" id="l-oprank"></div>
       <div class="card">
@@ -136,9 +136,17 @@
 
     <section class="block">
       <header class="block-head">
-        <h2>Ab in die Pampa: die zehn einsamsten Ladeparks</h2>
-        <p class="block-lead">Ladeparks mit mindestens 300 kW und 4 Ladepunkten (heutiger Ausbau), sortiert nach dem Abstand zum nächsten DC-Lader bei ihrer Eröffnung. Antippen zeigt den Park samt Abstandsradius auf der Karte. Die Liste folgt dem Zeitraumfilter: Ab 2015 dominieren die Pioniere, ab 2023 sieht man, wer heute noch weit draußen baut.</p>
+        <h2>Ab in die Pampa: wer baut gerade weit draußen?</h2>
+        <p class="block-lead">Alle Ladeparks der letzten drei Monate, die weiter als die gewählte Distanz vom nächsten DC-Lader entfernt eröffnet wurden. Antippen zeigt den Park samt Abstandsradius auf der Karte. Der jüngste Monat ist wegen Meldeverzug meist unvollständig.</p>
       </header>
+      <div class="pampa-ctrl">
+        <label class="field">
+          <span class="field-label">Mindestabstand <output id="pampa-km-out"></output></span>
+          <input type="range" id="pampa-km" min="5" max="30" step="5" aria-label="Mindestabstand in km">
+          <span class="pampa-ticks" aria-hidden="true"><span>5</span><span>10</span><span>15</span><span>20</span><span>25</span><span>30 km</span></span>
+        </label>
+        <p class="pampa-count" id="pampa-count"></p>
+      </div>
       <div class="card card-list">
         <div class="pampa" id="c-pampa"></div>
         <p class="pampa-empty" id="pampa-empty">Keine passenden Ladeparks im gewählten Filter.</p>
