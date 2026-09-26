@@ -32,9 +32,11 @@ cd public && python3 -m http.server 8000
 
 Dann http://localhost:8000 öffnen. Direktes Öffnen der `index.html` per Doppelklick funktioniert nicht, weil der Browser `fetch` auf lokale Dateien blockiert.
 
-## Veröffentlichen mit GitLab Pages
+## Veröffentlichen
 
-`.gitlab-ci.yml` veröffentlicht den Ordner `public/` bei jedem Push auf den Default-Branch.
+**GitHub Pages:** `.github/workflows/pages.yml` veröffentlicht `public/` bei jedem Push auf `main`. Einmalig unter *Settings → Pages → Source* „GitHub Actions“ wählen. Adresse: https://ehheuer.github.io/NewParkUsability/
+
+**GitLab Pages (alternativ):** `.gitlab-ci.yml` veröffentlicht `public/` bei jedem Push auf den Default-Branch.
 
 ## Methodik und Grenzen
 
