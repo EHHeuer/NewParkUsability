@@ -1,0 +1,13 @@
+# GitLab Pages: veröffentlicht den Ordner public/ als statische Seite.
+# Die Daten (public/data/lsr.json) werden lokal mit scripts/build_data.py erzeugt und eingecheckt.
+pages:
+  stage: deploy
+  image: alpine:3.20
+  script:
+    # vorkomprimierte Dateien, GitLab Pages liefert sie automatisch aus
+    - find public -type f \( -name '*.html' -o -name '*.js' -o -name '*.css' -o -name '*.json' \) | while read -r f; do gzip -9 -c "$f" > "$f.gz"; done
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

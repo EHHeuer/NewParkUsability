@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Schnellladenetz Deutschland</title>
+  <meta name="description" content="Wie verdichtet der Ausbau von DC-Ladepunkten das deutsche Schnellladenetz? Auswertung des Ladesäulenregisters der Bundesnetzagentur.">
+  <link rel="preload" href="fonts/hanken-grotesk-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="data/lsr.json" as="fetch" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%230F76A0'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23FBFAF7'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="masthead wrap">
+    <p class="eyebrow">Ladesäulenregister der Bundesnetzagentur <span class="dot-sep"></span> <span id="stand">Stand …</span></p>
+    <h1>Wird das Schnellladenetz noch dichter?</h1>
+    <p class="lead">Jeder neue DC-Ladepunkt steht irgendwo. Entweder erweitert er einen bestehenden Standort, verdichtet ein vorhandenes Netz oder erschließt neue Fläche. Diese Auswertung misst für jeden DC-Ladepunkt den Abstand zum nächsten, der vor ihm in Betrieb ging.</p>
+  </header>
+
+  <nav class="filters" aria-label="Filter">
+    <div class="wrap filters-inner">
+      <label class="field">
+        <span class="field-label">Bundesland</span>
+        <select id="f-bl"><option value="-1">Deutschland</option></select>
+      </label>
+      <div class="field">
+        <span class="field-label">Leistung neuer DC-Punkte</span>
+        <div class="seg" id="f-kw" role="group" aria-label="Leistungsklasse"></div>
+      </div>
+      <div class="field">
+        <span class="field-label">Gemessen gegen</span>
+        <div class="seg" id="f-ref" role="radiogroup" aria-label="Referenznetz">
+          <button type="button" data-v="da" aria-pressed="true">alle DC</button>
+          <button type="button" data-v="dh" aria-pressed="false">nur ≥ 150 kW</button>
+        </div>
+      </div>
+      <div class="field field-range">
+        <span class="field-label">Zeitraum <output id="f-range-out"></output></span>
+        <div class="range" id="f-range">
+          <div class="range-track"><div class="range-fill"></div></div>
+          <input type="range" id="f-from" aria-label="Von Jahr">
+          <input type="range" id="f-to" aria-label="Bis Jahr">
+        </div>
+      </div>
+      <button type="button" class="reset" id="f-reset">Zurücksetzen</button>
+    </div>
+  </nav>
+
+  <main class="wrap">
+    <section class="kpis" aria-label="Kennzahlen">
+      <article class="tile tile-hero">
+        <h2 class="tile-label">Ladepunkte gesamt</h2>
+        <p class="tile-value" id="k-lp">–</p>
+        <p class="tile-note" id="k-lp-note"></p>
+      </article>
+      <article class="tile">
+        <h2 class="tile-label">davon DC</h2>
+        <p class="tile-value" id="k-dc">–</p>
+        <p class="tile-note" id="k-dc-note"></p>
+      </article>
+      <article class="tile">
+        <h2 class="tile-label">DC-Ladeleistung</h2>
+        <p class="tile-value" id="k-kw">–</p>
+        <p class="tile-note" id="k-kw-note"></p>
+      </article>
+      <article class="tile">
+        <h2 class="tile-label">Median-Abstand neuer DC</h2>
+        <p class="tile-value" id="k-med">–</p>
+        <p class="tile-note" id="k-med-note"></p>
+      </article>
+    </section>
+
+    <section class="block">
+      <header class="block-head">
+        <p class="kicker">01 · Verdichtung</p>
+        <h2>Wie weit ist der neue DC-Ladepunkt vom nächsten älteren entfernt?</h2>
+        <p class="block-lead">Median je Quartal, das Band zeigt die mittleren 50 %. Logarithmische Skala, die Hilfslinien markieren die Klassengrenzen. Fällt die Kurve, entsteht Neues vor allem dort, wo schon geladen wird.</p>
+      </header>
+      <div class="card">
+        <div class="chart" id="c-dist" style="--h: 340px"></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <header class="block-head">
+        <h2>Erweitern, verdichten oder erschließen?</h2>
+        <p class="block-lead">Anteil der neuen DC-Ladepunkte je Inbetriebnahmejahr nach Abstand zum nächsten bestehenden.</p>
+      </header>
+      <div class="legend" id="l-class"></div>
+      <div class="card">
+        <div class="chart" id="c-class" style="--h: 320px"></div>
+      </div>
+      <details class="table-view">
+        <summary>Als Tabelle anzeigen</summary>
+        <div id="t-class"></div>
+      </details>
+    </section>
+
+    <section class="block block-map">
+      <header class="block-head">
+        <h2>Der Ausbau auf der Karte</h2>
+        <p class="block-lead">Jeder Punkt ist eine DC-Ladeeinrichtung, eingefärbt nach ihrem Abstand zum Zeitpunkt der Inbetriebnahme. Grau im Hintergrund: AC-Ladeorte.</p>
+      </header>
+      <div class="map-layout">
+        <div class="card map-card">
+          <div class="map" id="c-map">
+            <canvas></canvas>
+            <div class="map-year" id="map-year" aria-live="polite"></div>
+          </div>
+          <div class="player">
+            <button type="button" class="play" id="map-play" aria-label="Ausbau abspielen">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path class="i-play" d="M8 5.5v13l10.5-6.5z"/><g class="i-pause"><rect x="7" y="5" width="3.5" height="14" rx="1"/><rect x="13.5" y="5" width="3.5" height="14" rx="1"/></g></svg>
+            </button>
+            <input type="range" id="map-t" aria-label="Zeitpunkt auf der Karte">
+            <output id="map-t-out"></output>
+          </div>
+        </div>
+        <aside class="map-side">
+          <div class="legend legend-col" id="l-map"></div>
+          <div class="mini" id="map-stats"></div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="block">
+      <header class="block-head">
+        <h2>Wie weit ist es bis zum nächsten Schnelllader?</h2>
+        <p class="block-lead">Luftlinie vom Mittelpunkt jeder bewohnten 5-km-Rasterzelle zur nächsten DC-Ladeeinrichtung, jeweils zum Jahresende, logarithmische Skala. Als bewohnt gilt eine Zelle, in der heute mindestens ein Ladepunkt steht.</p>
+      </header>
+      <div class="legend" id="l-cov"></div>
+      <div class="card">
+        <div class="chart" id="c-cov" style="--h: 300px"></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <header class="block-head">
+        <p class="kicker">02 · Basisdaten</p>
+        <h2>Zubau je Quartal</h2>
+        <p class="block-lead">In Betrieb genommene Ladepunkte, AC und DC. Ziehen im Diagramm wählt einen Zeitraum.</p>
+      </header>
+      <div class="legend" id="l-zubau"></div>
+      <div class="card">
+        <div class="chart" id="c-zubau" style="--h: 300px"></div>
+      </div>
+    </section>
+
+    <div class="grid-2">
+      <section class="block">
+        <header class="block-head">
+          <h2>DC-Ladepunkte nach Leistung</h2>
+          <p class="block-lead">Nennleistung der Ladeeinrichtung, im gewählten Zeitraum in Betrieb genommen.</p>
+        </header>
+        <div class="card">
+          <div class="chart" id="c-kw" style="--h: 260px"></div>
+        </div>
+      </section>
+      <section class="block">
+        <header class="block-head">
+          <h2>Größte DC-Betreiber</h2>
+          <p class="block-lead">DC-Ladepunkte im gewählten Zeitraum und Gebiet.</p>
+        </header>
+        <div class="card">
+          <div class="chart" id="c-op"></div>
+        </div>
+      </section>
+    </div>
+
+    <section class="block">
+      <header class="block-head">
+        <h2>Bundesländer</h2>
+        <p class="block-lead">Ladepunkte im gewählten Zeitraum. Ein Klick auf ein Land setzt den Filter.</p>
+      </header>
+      <div class="legend" id="l-bl"></div>
+      <div class="card">
+        <div class="chart" id="c-bl"></div>
+      </div>
+    </section>
+
+    <section class="block method">
+      <h2>Methodik und Grenzen</h2>
+      <div class="method-grid">
+        <div>
+          <h3>Was als DC zählt</h3>
+          <p>Eine Ladeeinrichtung mit mindestens einem DC-Stecker (CCS, CHAdeMO, MCS). Leistungsklasse nach der Nennleistung der gesamten Ladeeinrichtung.</p>
+        </div>
+        <div>
+          <h3>Wie der Abstand entsteht</h3>
+          <p>Für jede DC-Ladeeinrichtung die Luftlinie zur nächsten DC-Ladeeinrichtung mit strikt früherem Inbetriebnahmedatum. Einrichtungen desselben Tages zählen nicht als Vorgänger. Gewichtet wird mit der Zahl der Ladepunkte.</p>
+        </div>
+        <div>
+          <h3>Klassen</h3>
+          <p>Unter 300 m: Erweiterung eines bestehenden Standorts. 300 m bis 2 km: Verdichtung. 2 bis 10 km: Lückenschluss. Über 10 km: neue Fläche.</p>
+        </div>
+        <div>
+          <h3>Grenzen</h3>
+          <p>Das Register enthält nur heute betriebene und vollständig gemeldete Einrichtungen. Abgebaute Säulen fehlen, dadurch wirken frühe Jahre dünner. Die letzten Monate sind wegen Meldeverzug unvollständig. Bundeslandfilter berücksichtigt Vorgänger über Landesgrenzen hinweg.</p>
+        </div>
+      </div>
+      <p class="source">Datenquelle: <a href="https://www.bundesnetzagentur.de/ladesaeulenregister" rel="noopener">Bundesnetzagentur, Ladesäulenregister</a>, <span id="src-stand"></span>. Eigene Auswertung. Schrift: Hanken Grotesk (SIL OFL 1.1), Diagramme: D3.js (ISC).</p>
+    </section>
+  </main>
+
+  <div class="tooltip" id="tooltip" role="status" aria-live="polite"></div>
+  <div class="loading" id="loading"><span></span>Daten werden geladen</div>
+
+  <script src="vendor/d3.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
