@@ -17,7 +17,7 @@
     cls: [cv("--c0"), cv("--c1"), cv("--c2"), cv("--c3")],
     pw: [cv("--p0"), cv("--p1"), cv("--p2"), cv("--p3")],
   };
-  const CLASS_NAMES = ["Erweiterung", "Verdichtung", "Lückenschluss", "Neue Fläche"];
+  const CLASS_NAMES = ["Am Bestand", "Verdichtung", "Lückenschluss", "Neue Fläche"];
   const CLASS_RANGES = ["unter 300 m", "300 m – 2 km", "2 – 10 km", "über 10 km"];
   const CLASS_LIMITS = [300, 2000, 10000];
   const PW_NAMES = ["unter 50 kW", "50 – 149 kW", "150 – 299 kW", "ab 300 kW"];
@@ -144,16 +144,27 @@
   // --------------------------------------------------------------------------
   function prepare(raw) {
     const dc = raw.dc, n = dc.m.length;
-    const pc = new Uint8Array(n), clsA = new Uint8Array(n), clsH = new Uint8Array(n), yr = new Uint16Array(n);
+    const pc = new Uint8Array(n), yr = new Uint16Array(n);
     for (let i = 0; i < n; i++) {
       pc[i] = pwOf(dc.kw[i]);
-      clsA[i] = classOf(dc.da[i]);
-      clsH[i] = classOf(dc.dh[i]);
       yr[i] = raw.meta.baseYear + Math.floor(dc.m[i] / 12);
     }
+    // Ladeparks: Einheit der Abstandsanalyse
+    const pk = raw.parks, np = pk.m.length;
+    const P = { ...pk, n: np, pc: new Uint8Array(np), clsA: new Uint8Array(np), clsH: new Uint8Array(np), yr: new Uint16Array(np) };
+    for (let i = 0; i < np; i++) {
+      P.pc[i] = pwOf(pk.kw[i]);
+      P.clsA[i] = classOf(pk.da[i]);
+      P.clsH[i] = classOf(pk.dh[i]);
+      P.yr[i] = raw.meta.baseYear + Math.floor(pk.m[i] / 12);
+    }
+    // 15 größte Betreiber nach DC-Ladepunkten (bundesweit, fest, damit die Auswahl beim Filtern stabil bleibt)
+    const opLp = new Map();
+    for (let i = 0; i < n; i++) opLp.set(dc.op[i], (opLp.get(dc.op[i]) || 0) + dc.lp[i]);
+    const topOps = [...opLp].sort((a, b) => b[1] - a[1]).slice(0, 15).map((d) => d[0]);
     const lastM = d3.max(dc.m);
     return {
-      raw, base: raw.meta.baseYear, bl: raw.bl, op: raw.op, dc, n, pc, clsA, clsH, yr, lastM,
+      raw, base: raw.meta.baseYear, bl: raw.bl, op: raw.op, ort: raw.ort, dc, n, pc, yr, P, topOps, lastM,
       lastYear: raw.meta.baseYear + Math.floor(lastM / 12),
       firstYear: 2012,
       ac: raw.acAgg, acDots: raw.acDots, cov: raw.cov,
@@ -161,8 +172,8 @@
   }
 
   const inBl = (b) => state.bl < 0 || b === state.bl;
-  const clsArr = () => (state.ref === "da" ? D.clsA : D.clsH);
-  const distArr = () => (state.ref === "da" ? D.dc.da : D.dc.dh);
+  const clsArr = () => (state.ref === "da" ? D.P.clsA : D.P.clsH);
+  const distArr = () => (state.ref === "da" ? D.P.da : D.P.dh);
 
   // --------------------------------------------------------------------------
   // Filter-UI
@@ -232,6 +243,13 @@
   // --------------------------------------------------------------------------
   // Aggregationen
   // --------------------------------------------------------------------------
+  function selPark() {
+    // Ladeparks, die Bundesland- und Leistungsfilter erfüllen (Leistung = stärkste Einrichtung im Park)
+    const out = [], P = D.P;
+    for (let i = 0; i < P.n; i++) if (inBl(P.bl[i]) && state.kw[P.pc[i]]) out.push(i);
+    return out;
+  }
+
   function selDC() {
     // Indizes der DC-Einrichtungen, die Bundesland- und Leistungsfilter erfüllen
     const out = [];
@@ -265,21 +283,21 @@
   function renderDist(animate) {
     const f = cDist.f.measure();
     const t = tr(animate);
-    const dist = distArr(), lp = D.dc.lp;
+    const dist = distArr();
     const q0 = (D.firstYear - D.base) * 4, q1 = Math.floor(D.lastM / 3);
     const buckets = new Map();
-    for (const i of selDC()) {
+    for (const i of selPark()) {
       const d = dist[i];
       if (d < 0) continue;
-      const q = Math.floor(D.dc.m[i] / 3);
+      const q = Math.floor(D.P.m[i] / 3);
       if (q < q0) continue;
       let b = buckets.get(q); if (!b) buckets.set(q, (b = { v: [], w: [] }));
-      b.v.push(Math.max(d, 12)); b.w.push(lp[i]);
+      b.v.push(Math.max(d, 12)); b.w.push(1);
     }
     const quarters = d3.range(q0, q1 + 1).map((q) => {
       const b = buckets.get(q);
       const n = b ? d3.sum(b.w) : 0;
-      if (n < 20) return { q, n, med: NaN, p25: NaN, p75: NaN };
+      if (n < 8) return { q, n, med: NaN, p25: NaN, p75: NaN };
       const [p25, med, p75] = wQuantiles(b.v, b.w, [0.25, 0.5, 0.75]);
       return { q, n, med, p25, p75 };
     });
@@ -344,7 +362,7 @@
         const partial = q === Math.floor(D.lastM / 3) && D.lastM % 3 !== 2;
         showTip(`<div class="tt-h">${qLabel(q)}${partial ? " · unvollständig" : ""}</div>` +
           ttRow("Median", fmtDist(d.med), COL.dc) + ttRow("Mittlere 50 %", `${fmtDist(d.p25)} – ${fmtDist(d.p75)}`) +
-          ttRow("Neue DC-Ladepunkte", fmtInt(d.n)), ev);
+          ttRow("Neue Ladeparks", fmtInt(d.n)), ev);
       })
       .on("pointerleave", onLeave);
     function onLeave() { f.hLine.style("opacity", 0); f.hDot.style("opacity", 0); hideTip(); }
@@ -366,11 +384,11 @@
   function classByYear() {
     const cls = clsArr();
     const rows = new Map();
-    for (const i of selDC()) {
-      const y = D.yr[i];
+    for (const i of selPark()) {
+      const y = D.P.yr[i];
       if (y < state.from || y > state.to) continue;
       let r = rows.get(y); if (!r) rows.set(y, (r = [0, 0, 0, 0]));
-      r[cls[i]] += D.dc.lp[i];
+      r[cls[i]] += 1;
     }
     return d3.range(state.from, state.to + 1).map((y) => {
       const c = rows.get(y) || [0, 0, 0, 0];
@@ -431,12 +449,12 @@
     cols.on("pointermove", (ev, d) => {
       showTip(`<div class="tt-h">${d.y}${d.y === D.lastYear ? " · bis " + mLabel(D.lastM) : ""}</div>` +
         d3.range(3, -1, -1).map((i) => ttRow(CLASS_NAMES[i], `${fmtPct(d.s[i])} · ${fmtInt(d.c[i])}`, COL.cls[i])).join("") +
-        ttRow("Neue DC-Ladepunkte", fmtInt(d.n)), ev);
+        ttRow("Neue Ladeparks", fmtInt(d.n)), ev);
       cols.style("opacity", (e) => (e === d ? 1 : 0.55));
     }).on("pointerleave", () => { hideTip(); cols.style("opacity", 1); });
 
     // Tabellenansicht
-    $("#t-class").innerHTML = `<table><thead><tr><th>Jahr</th>${CLASS_NAMES.map((n) => `<th>${n}</th>`).join("")}<th>DC-Ladepunkte</th></tr></thead><tbody>` +
+    $("#t-class").innerHTML = `<table><thead><tr><th>Jahr</th>${CLASS_NAMES.map((n) => `<th>${n}</th>`).join("")}<th>Neue Ladeparks</th></tr></thead><tbody>` +
       data.map((d) => `<tr><td>${d.y}</td>${d.s.map((s) => `<td>${fmtPct(s)}</td>`).join("")}<td>${fmtInt(d.n)}</td></tr>`).join("") + "</tbody></table>";
   }
 
@@ -469,13 +487,17 @@
     const proj = d3.geoMercator().fitExtent([[pad, pad * 1.2], [r.width - pad, r.height - pad]],
       { type: "MultiPoint", coordinates: [[5.87, 47.27], [15.04, 55.06], [5.87, 55.06], [15.04, 47.27]] });
     const project = (lat, lon) => proj([lon / 1e4, lat / 1e4]);
-    const dc = D.dc;
-    map.x = new Float32Array(D.n); map.y = new Float32Array(D.n);
-    for (let i = 0; i < D.n; i++) { const p = project(dc.lat[i], dc.lon[i]); map.x[i] = p[0]; map.y[i] = p[1]; }
+    map.proj = proj;
+    const P = D.P;
+    map.x = new Float32Array(P.n); map.y = new Float32Array(P.n); map.rad = new Float32Array(P.n);
+    map.r = Math.max(1.3, Math.min(2.6, r.width / 330));
+    for (let i = 0; i < P.n; i++) {
+      const p = project(P.lat[i], P.lon[i]); map.x[i] = p[0]; map.y[i] = p[1];
+      map.rad[i] = map.r * Math.min(2.6, 0.75 + 0.22 * Math.sqrt(P.lp[i]));
+    }
     const a = D.acDots, na = a.m.length;
     map.ax = new Float32Array(na); map.ay = new Float32Array(na);
     for (let i = 0; i < na; i++) { const p = project(a.lat[i], a.lon[i]); map.ax[i] = p[0]; map.ay[i] = p[1]; }
-    map.r = Math.max(1.3, Math.min(2.6, r.width / 330));
     map.tree = null;
   }
 
@@ -496,42 +518,56 @@
     }
     ctx.globalAlpha = 1;
 
-    const cls = clsArr(), dc = D.dc;
+    const cls = clsArr(), P = D.P;
     const counts = [0, 0, 0, 0];
     const fresh = [];
     for (let pass = 0; pass < 2; pass++) { // erst andere Länder blass, dann Auswahl
       for (let c = 0; c < 4; c++) {
         ctx.beginPath();
-        for (let i = 0; i < D.n; i++) {
-          if (dc.m[i] > t) break;
-          if (!state.kw[D.pc[i]] || cls[i] !== c) continue;
-          const sel = inBl(dc.bl[i]);
+        for (let i = 0; i < P.n; i++) {
+          if (P.m[i] > t) break;
+          if (!state.kw[P.pc[i]] || cls[i] !== c) continue;
+          const sel = inBl(P.bl[i]);
           if ((pass === 0) === sel) continue;
-          if (sel) { counts[c] += dc.lp[i]; if (t - dc.m[i] < 3) fresh.push(i); }
-          const r = map.r * (D.pc[i] >= 2 ? 1.2 : 0.95);
+          if (sel) { counts[c] += 1; if (t - P.m[i] < 3) fresh.push(i); }
+          const r = map.rad[i];
           ctx.moveTo(map.x[i] + r, map.y[i]);
           ctx.arc(map.x[i], map.y[i], r, 0, Math.PI * 2);
         }
         ctx.fillStyle = COL.cls[c];
-        ctx.globalAlpha = pass === 0 ? 0.18 : 0.92;
+        ctx.globalAlpha = pass === 0 ? 0.18 : 0.85;
         ctx.fill();
       }
     }
     ctx.globalAlpha = 1;
-    // Frisch in Betrieb genommene Punkte mit Ring
+    // Frisch eröffnete Parks mit Ring
     if (map.playing) {
       ctx.lineWidth = 1;
       for (const i of fresh) {
-        const age = (t - dc.m[i] + (map.phase || 0)) / 3;
+        const age = (t - P.m[i] + (map.phase || 0)) / 3;
         ctx.strokeStyle = COL.cls[cls[i]];
         ctx.globalAlpha = Math.max(0, 0.6 * (1 - age));
-        ctx.beginPath(); ctx.arc(map.x[i], map.y[i], map.r * (1.4 + age * 3.5), 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(map.x[i], map.y[i], map.rad[i] * (1.4 + age * 3.5), 0, Math.PI * 2); ctx.stroke();
       }
       ctx.globalAlpha = 1;
     }
+    // Markierter Park (aus der Pampa-Liste) mit Radius bis zum nächsten älteren DC
+    if (map.focus != null && P.m[map.focus] <= t) {
+      const i = map.focus, d = distArr()[i];
+      if (d > 0) {
+        const kmPx = map.y[i] - map.proj([P.lon[i] / 1e4, P.lat[i] / 1e4 + 1 / 111.32])[1]; // Pixel je km in Nord-Süd-Richtung
+        ctx.beginPath(); ctx.arc(map.x[i], map.y[i], (d / 1000) * kmPx, 0, Math.PI * 2);
+        ctx.fillStyle = COL.cls[3]; ctx.globalAlpha = 0.1; ctx.fill();
+        ctx.globalAlpha = 0.7; ctx.lineWidth = 1.5; ctx.strokeStyle = COL.ink; ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      ctx.beginPath(); ctx.arc(map.x[i], map.y[i], map.r * 3, 0, Math.PI * 2);
+      ctx.fillStyle = COL.ink; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = COL.surface; ctx.stroke();
+    }
     if (map.hover != null) {
       const i = map.hover;
-      ctx.beginPath(); ctx.arc(map.x[i], map.y[i], map.r * 2.6, 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(map.x[i], map.y[i], Math.max(map.r * 2.6, map.rad[i] + 2), 0, Math.PI * 2);
       ctx.fillStyle = COL.cls[cls[i]]; ctx.fill();
       ctx.lineWidth = 2; ctx.strokeStyle = COL.surface; ctx.stroke();
     }
@@ -542,25 +578,30 @@
     const total = d3.sum(counts);
     $("#l-map").innerHTML = CLASS_NAMES.map((n, i) =>
       `<span class="legend-item"><span><i class="sw dot" style="background:${COL.cls[i]}"></i>${n}</span><span class="val">${total ? fmtPct(counts[i] / total) : "–"}</span></span>`).join("");
-    $("#map-stats").innerHTML = `<strong>${fmtInt(total)}</strong>DC-Ladepunkte in Betrieb bis ${mLabel(t)}${state.bl >= 0 ? `, ${D.bl[state.bl]}` : ""}. Anteile nach Abstand bei Inbetriebnahme.`;
+    $("#map-stats").innerHTML = `<strong>${fmtInt(total)}</strong>DC-Ladeparks bis ${mLabel(t)}${state.bl >= 0 ? `, ${D.bl[state.bl]}` : ""}. Anteile nach Abstand bei Eröffnung, Punktgröße nach Ladepunkten.`;
+  }
+
+  function parkTip(i) {
+    const P = D.P, d = distArr()[i], c = clsArr()[i];
+    return `<div class="tt-h">${D.ort[P.ort[i]]}</div>` + ttRow("Betreiber", shortOp(D.op[P.op[i]])) +
+      ttRow("Eröffnet", mLabel(P.m[i])) + ttRow("Heute", `${P.lp[i]} LP · bis ${fmtInt(P.kw[i])} kW`) +
+      ttRow("Abstand bei Eröffnung", d < 0 ? "erster Park" : fmtDist(d), COL.cls[c]) + ttRow("Klasse", CLASS_NAMES[c]);
   }
 
   function mapHover(ev) {
     const r = map.canvas.getBoundingClientRect();
     const mx = ev.clientX - r.left, my = ev.clientY - r.top;
+    const P = D.P;
     if (!map.tree || map.treeT !== state.mapT || map.treeKey !== keyOf()) {
       const idx = [];
-      for (let i = 0; i < D.n && D.dc.m[i] <= state.mapT; i++) if (state.kw[D.pc[i]] && inBl(D.dc.bl[i])) idx.push(i);
+      for (let i = 0; i < P.n && P.m[i] <= state.mapT; i++) if (state.kw[P.pc[i]] && inBl(P.bl[i])) idx.push(i);
       map.tree = d3.quadtree(idx, (i) => map.x[i], (i) => map.y[i]);
       map.treeT = state.mapT; map.treeKey = keyOf();
     }
     const i = map.tree.find(mx, my, 14);
     if (i === undefined) { if (map.hover != null) { map.hover = null; drawMap(); } hideTip(); return; }
     if (map.hover !== i) { map.hover = i; drawMap(); }
-    const dc = D.dc, d = distArr()[i], c = clsArr()[i];
-    showTip(`<div class="tt-h">${shortOp(D.op[dc.op[i]])}</div>` +
-      ttRow("In Betrieb seit", mLabel(dc.m[i])) + ttRow("Leistung", `${fmtInt(dc.kw[i])} kW · ${dc.lp[i]} LP`) +
-      ttRow("Abstand bei Start", d < 0 ? "erster Punkt" : fmtDist(d), COL.cls[c]) + ttRow("Klasse", CLASS_NAMES[c]), ev);
+    showTip(parkTip(i), ev);
   }
   const keyOf = () => `${state.bl}|${state.kw.join()}|${state.ref}`;
 
@@ -902,18 +943,19 @@
       if (y >= state.from && y <= state.to) acNew += lp;
     }
     let dcLp = 0, dcKw = 0, dcNew = 0;
-    const vals = [], wts = [];
-    const dist = distArr();
-    let newArea = 0, newTot = 0;
-    const cls = clsArr();
     for (const i of selDC()) {
       if (D.yr[i] > state.to) continue;
       dcLp += D.dc.lp[i]; dcKw += D.dc.kw[i];
-      if (D.yr[i] >= state.from) {
-        dcNew += D.dc.lp[i];
-        if (dist[i] >= 0) { vals.push(dist[i]); wts.push(D.dc.lp[i]); }
-        newTot += D.dc.lp[i]; if (cls[i] === 3) newArea += D.dc.lp[i];
-      }
+      if (D.yr[i] >= state.from) dcNew += D.dc.lp[i];
+    }
+    const vals = [], wts = [];
+    const dist = distArr(), cls = clsArr();
+    let newArea = 0, newTot = 0;
+    for (const i of selPark()) {
+      if (D.P.yr[i] < state.from || D.P.yr[i] > state.to) continue;
+      newTot += 1;
+      if (cls[i] === 3) newArea += 1;
+      if (dist[i] >= 0) { vals.push(dist[i]); wts.push(1); }
     }
     const allKw = state.kw.every(Boolean);
     const upto = state.to >= D.lastYear ? `Stand ${D.raw.meta.stand}` : `Ende ${state.to}`;
@@ -926,7 +968,89 @@
     $("#k-kw-note").textContent = `Summe Nennleistung DC-Ladeeinrichtungen`;
     const med = vals.length ? wQuantiles(vals, wts, [0.5])[0] : NaN;
     tweenNumber("#k-med", med, fmtDist, animate);
-    $("#k-med-note").textContent = newTot ? `${fmtPct(newArea / newTot)} erschließen neue Fläche (> 10 km)` : "keine neuen DC-Punkte im Filter";
+    $("#k-med-note").textContent = newTot ? `${fmtInt(newTot)} neue Parks, ${fmtPct(newArea / newTot)} davon auf neuer Fläche` : "keine neuen Ladeparks im Filter";
+  }
+
+  // --------------------------------------------------------------------------
+  // Betreiber-Ranking: Fläche oder Bestand?
+  // --------------------------------------------------------------------------
+  const MIN_PARKS = 10;
+  function renderOpRank() {
+    const cls = clsArr(), dist = distArr();
+    const rows = new Map(D.topOps.map((op) => [op, { c: [0, 0, 0, 0], d: [] }]));
+    for (const i of selPark()) {
+      const r = rows.get(D.P.op[i]);
+      if (!r || D.P.yr[i] < state.from || D.P.yr[i] > state.to) continue;
+      r.c[cls[i]] += 1;
+      if (dist[i] >= 0) r.d.push(dist[i]);
+    }
+    const out = [];
+    let hidden = 0;
+    for (const [op, r] of rows) {
+      const n = d3.sum(r.c);
+      if (n < MIN_PARKS) { hidden++; continue; }
+      const far = (r.c[2] + r.c[3]) / n;
+      out.push({ key: op, name: shortOp(D.op[op]), title: D.op[op], n, c: r.c, far,
+        med: r.d.length ? d3.median(r.d) : NaN, parts: [r.c[3] / n, r.c[2] / n, r.c[1] / n, r.c[0] / n] });
+    }
+    out.sort((a, b) => b.far - a.far || b.med - a.med);
+    hbars($("#c-oprank"), out, {
+      colors: [COL.cls[3], COL.cls[2], COL.cls[1], COL.cls[0]], labelSpace: 118,
+      label: (r) => `${fmtPct(r.far)} · ${fmtDist(r.med)}`,
+      tip: (r) => `<div class="tt-h">${r.title}</div>` +
+        d3.range(3, -1, -1).map((k) => ttRow(CLASS_NAMES[k], `${fmtPct(r.c[k] / r.n)} · ${fmtInt(r.c[k])}`, COL.cls[k])).join("") +
+        ttRow("Median-Abstand", fmtDist(r.med)) + ttRow("Neue Ladeparks", fmtInt(r.n)),
+    });
+    $("#oprank-note").textContent = hidden ? `${hidden} der 15 größten Betreiber mit weniger als ${MIN_PARKS} neuen Parks im Filter ausgeblendet.` : "";
+  }
+
+  // --------------------------------------------------------------------------
+  // Top 10: Ladeparks am weitesten vom Bestand (>= 300 kW, >= 4 Ladepunkte)
+  // --------------------------------------------------------------------------
+  function renderPampa() {
+    const PAMPA_ROW = innerWidth < 720 ? 78 : 64;
+    const P = D.P, dist = distArr();
+    const cand = [];
+    for (let i = 0; i < P.n; i++) {
+      if (P.kw[i] < 300 || P.lp[i] < 4 || !inBl(P.bl[i]) || P.yr[i] < state.from || P.yr[i] > state.to || dist[i] < 0) continue;
+      cand.push(i);
+    }
+    cand.sort((a, b) => dist[b] - dist[a]);
+    const top = cand.slice(0, 10);
+    if (map.focus != null && !top.includes(map.focus)) map.focus = null;
+    const max = top.length ? dist[top[0]] : 1;
+    const box = d3.select("#c-pampa").style("height", `${Math.max(1, top.length) * PAMPA_ROW}px`);
+    const rows = box.selectAll("button.pampa-row").data(top, (i) => i).join(
+      (e) => {
+        const r = e.append("button").attr("type", "button").attr("class", "pampa-row")
+          .style("transform", (_, k) => `translateY(${k * PAMPA_ROW}px)`).style("opacity", 0);
+        r.append("span").attr("class", "pampa-rank");
+        const t = r.append("span").attr("class", "pampa-text");
+        t.append("span").attr("class", "pampa-ort");
+        t.append("span").attr("class", "pampa-sub");
+        const v = r.append("span").attr("class", "pampa-val");
+        v.append("span").attr("class", "pampa-dist");
+        v.append("span").attr("class", "pampa-bar").append("i");
+        return r;
+      },
+      (u) => u,
+      (ex) => ex.style("opacity", 0).transition().duration(400).remove()
+    );
+    rows.style("transform", (_, k) => `translateY(${k * PAMPA_ROW}px)`).style("opacity", 1)
+      .classed("is-active", (i) => i === map.focus);
+    rows.select(".pampa-rank").text((_, k) => String(k + 1).padStart(2, "0"));
+    rows.select(".pampa-ort").text((i) => `${D.ort[P.ort[i]]}`);
+    rows.select(".pampa-sub").text((i) => `${shortOp(D.op[P.op[i]])} · ${mLabel(P.m[i])} · ${P.lp[i]} LP · ${fmtInt(P.kw[i])} kW`);
+    rows.select(".pampa-dist").text((i) => fmtDist(dist[i]));
+    rows.select(".pampa-bar i").style("width", (i) => `${(dist[i] / max) * 100}%`);
+    rows.on("click", (_, i) => {
+      map.focus = map.focus === i ? null : i;
+      stopPlay();
+      state.mapT = D.lastM;
+      renderPampa(); drawMap();
+      if (map.focus != null) document.querySelector(".block-map").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    }).on("pointermove", (ev, i) => showTip(parkTip(i), ev)).on("pointerleave", hideTip);
+    $("#pampa-empty").style.display = top.length ? "none" : "block";
   }
 
   // --------------------------------------------------------------------------
@@ -939,6 +1063,8 @@
     renderKw(animate);
     renderOp();
     renderBl();
+    renderOpRank();
+    renderPampa();
     if (!map.playing) {
       const endM = Math.min(D.lastM, (state.to - D.base) * 12 + 11);
       state.mapT = endM;
@@ -964,6 +1090,7 @@
 
     setupFilters(); syncFilters();
     initDist(); initClass(); initMap(); initCov(); initZubau(); initKw();
+    legend("#l-oprank", d3.range(3, -1, -1).map((i) => [CLASS_NAMES[i], COL.cls[i], CLASS_RANGES[i]]));
     layoutMap();
     update(false);
     $("#loading").classList.add("done");

@@ -14,7 +14,7 @@
   <header class="masthead wrap">
     <p class="eyebrow">Ladesäulenregister der Bundesnetzagentur <span class="dot-sep"></span> <span id="stand">Stand …</span></p>
     <h1>Wird das Schnellladenetz noch dichter?</h1>
-    <p class="lead">Jeder neue DC-Ladepunkt steht irgendwo. Entweder erweitert er einen bestehenden Standort, verdichtet ein vorhandenes Netz oder erschließt neue Fläche. Diese Auswertung misst für jeden DC-Ladepunkt den Abstand zum nächsten, der vor ihm in Betrieb ging.</p>
+    <p class="lead">Jeder neue Schnellladepark steht irgendwo. Entweder direkt neben bestehender Infrastruktur, verdichtend im vorhandenen Netz oder auf neuer Fläche. Diese Auswertung misst für jeden DC-Ladepark den Abstand zum nächsten DC-Lader, der vor seiner Eröffnung schon in Betrieb war. Baut ein Betreiber seinen eigenen Park später aus, zählt das nicht als Verdichtung.</p>
   </header>
 
   <nav class="filters" aria-label="Filter">
@@ -24,7 +24,7 @@
         <select id="f-bl"><option value="-1">Deutschland</option></select>
       </label>
       <div class="field">
-        <span class="field-label">Leistung neuer DC-Punkte</span>
+        <span class="field-label">Leistung (DC)</span>
         <div class="seg" id="f-kw" role="group" aria-label="Leistungsklasse"></div>
       </div>
       <div class="field">
@@ -64,7 +64,7 @@
         <p class="tile-note" id="k-kw-note"></p>
       </article>
       <article class="tile">
-        <h2 class="tile-label">Median-Abstand neuer DC</h2>
+        <h2 class="tile-label">Median-Abstand neuer Parks</h2>
         <p class="tile-value" id="k-med">–</p>
         <p class="tile-note" id="k-med-note"></p>
       </article>
@@ -73,7 +73,7 @@
     <section class="block">
       <header class="block-head">
         <p class="kicker">01 · Verdichtung</p>
-        <h2>Wie weit ist der neue DC-Ladepunkt vom nächsten älteren entfernt?</h2>
+        <h2>Wie weit liegt ein neuer Ladepark vom bestehenden Netz entfernt?</h2>
         <p class="block-lead">Median je Quartal, das Band zeigt die mittleren 50 %. Logarithmische Skala, die Hilfslinien markieren die Klassengrenzen. Fällt die Kurve, entsteht Neues vor allem dort, wo schon geladen wird.</p>
       </header>
       <div class="card">
@@ -84,7 +84,7 @@
     <section class="block">
       <header class="block-head">
         <h2>Erweitern, verdichten oder erschließen?</h2>
-        <p class="block-lead">Anteil der neuen DC-Ladepunkte je Inbetriebnahmejahr nach Abstand zum nächsten bestehenden.</p>
+        <p class="block-lead">Anteil der neu eröffneten DC-Ladeparks je Jahr nach Abstand zum nächsten bereits bestehenden DC-Lader.</p>
       </header>
       <div class="legend" id="l-class"></div>
       <div class="card">
@@ -96,10 +96,22 @@
       </details>
     </section>
 
+    <section class="block">
+      <header class="block-head">
+        <h2>Wer baut in die Fläche, wer an den Bestand?</h2>
+        <p class="block-lead">Die 15 größten DC-Betreiber, sortiert nach dem Anteil ihrer neuen Ladeparks, die mehr als 2 km vom bestehenden Netz entfernt eröffnet wurden. Rechts: dieser Anteil und der Median-Abstand.</p>
+      </header>
+      <div class="legend" id="l-oprank"></div>
+      <div class="card">
+        <div class="chart chart-auto" id="c-oprank"></div>
+      </div>
+      <p class="footnote" id="oprank-note"></p>
+    </section>
+
     <section class="block block-map">
       <header class="block-head">
         <h2>Der Ausbau auf der Karte</h2>
-        <p class="block-lead">Jeder Punkt ist eine DC-Ladeeinrichtung, eingefärbt nach ihrem Abstand zum Zeitpunkt der Inbetriebnahme. Grau im Hintergrund: AC-Ladeorte.</p>
+        <p class="block-lead">Jeder Punkt ist ein DC-Ladepark, eingefärbt nach seinem Abstand zum Zeitpunkt der Eröffnung, Größe nach Ladepunkten. Grau im Hintergrund: AC-Ladeorte.</p>
       </header>
       <div class="map-layout">
         <div class="card map-card">
@@ -119,6 +131,17 @@
           <div class="legend legend-col" id="l-map"></div>
           <div class="mini" id="map-stats"></div>
         </aside>
+      </div>
+    </section>
+
+    <section class="block">
+      <header class="block-head">
+        <h2>Ab in die Pampa: die zehn einsamsten Ladeparks</h2>
+        <p class="block-lead">Ladeparks mit mindestens 300 kW und 4 Ladepunkten (heutiger Ausbau), sortiert nach dem Abstand zum nächsten DC-Lader bei ihrer Eröffnung. Antippen zeigt den Park samt Abstandsradius auf der Karte. Die Liste folgt dem Zeitraumfilter: Ab 2015 dominieren die Pioniere, ab 2023 sieht man, wer heute noch weit draußen baut.</p>
+      </header>
+      <div class="card card-list">
+        <div class="pampa" id="c-pampa"></div>
+        <p class="pampa-empty" id="pampa-empty">Keine passenden Ladeparks im gewählten Filter.</p>
       </div>
     </section>
 
@@ -185,12 +208,12 @@
           <p>Eine Ladeeinrichtung mit mindestens einem DC-Stecker (CCS, CHAdeMO, MCS). Leistungsklasse nach der Nennleistung der gesamten Ladeeinrichtung.</p>
         </div>
         <div>
-          <h3>Wie der Abstand entsteht</h3>
-          <p>Für jede DC-Ladeeinrichtung die Luftlinie zur nächsten DC-Ladeeinrichtung mit strikt früherem Inbetriebnahmedatum. Einrichtungen desselben Tages zählen nicht als Vorgänger. Gewichtet wird mit der Zahl der Ladepunkte.</p>
+          <h3>Ladepark und Abstand</h3>
+          <p>Ein Ladepark sind alle DC-Einrichtungen desselben Betreibers, die höchstens 200 m auseinanderliegen. Sein Abstand ist die Luftlinie von der ersten Einrichtung zur nächsten DC-Einrichtung eines beliebigen Betreibers, die vorher in Betrieb ging. Spätere Erweiterungen desselben Parks zählen nicht. Jeder Park zählt einmal, unabhängig von seiner Größe.</p>
         </div>
         <div>
           <h3>Klassen</h3>
-          <p>Unter 300 m: Erweiterung eines bestehenden Standorts. 300 m bis 2 km: Verdichtung. 2 bis 10 km: Lückenschluss. Über 10 km: neue Fläche.</p>
+          <p>Unter 300 m: direkt am Bestand, meist ein zweiter Betreiber am selben Ort. 300 m bis 2 km: Verdichtung. 2 bis 10 km: Lückenschluss. Über 10 km: neue Fläche. Die Leistungsklasse eines Parks richtet sich nach seiner stärksten Einrichtung.</p>
         </div>
         <div>
           <h3>Grenzen</h3>

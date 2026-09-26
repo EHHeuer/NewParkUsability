@@ -5,7 +5,8 @@ Nur Standardbibliothek, damit das Skript auch in einem schlanken CI-Image läuft
 
     python3 scripts/build_data.py Ladesaeulenregister_BNetzA_2026-09-01.csv
 
-Erzeugt public/data/lsr.json. Kernstück ist die Abstandsanalyse: Für jede
+Erzeugt public/data/lsr.json. Kernstück ist die Abstandsanalyse: DC-Einrichtungen
+desselben Betreibers im Umkreis von 200 m bilden einen Ladepark. Für jede
 DC-Ladeeinrichtung wird der Abstand zur nächsten DC-Ladeeinrichtung bestimmt,
 die *vor* ihr in Betrieb ging (strikt früheres Inbetriebnahmedatum). Zusätzlich
 wird dasselbe gegen das Teilnetz mit >= 150 kW (HPC) gerechnet und für ein
@@ -22,6 +23,7 @@ from collections import defaultdict
 from datetime import date
 
 HPC_KW = 150
+PARK_LINK_M = 200  # DC-Einrichtungen desselben Betreibers bis zu diesem Abstand = ein Ladepark
 CELL_DEG_LAT = 0.045  # ~5 km
 YEARS = list(range(2012, 2027))
 BASE_YEAR = 2000  # Monatsindex m = (Jahr - 2000) * 12 + (Monat - 1)
@@ -126,6 +128,7 @@ def main(path, out):
             dc="DC" in plugs,
             bl=idx(bl_idx, bl_names, r[ix["Bundesland"]].strip()),
             op=r[ix["Betreiber"]].strip(),
+            ort=r[ix["Ort"]].strip(),
         ))
 
     dc = sorted((r for r in rows if r["dc"]), key=lambda r: r["day"])
@@ -155,6 +158,38 @@ def main(path, out):
                 g_hpc.add(r["lat"], r["lon"])
         i = j
 
+    # --- Ladeparks: gleicher Betreiber, Einrichtungen <= PARK_LINK_M verkettet ----
+    parent = list(range(len(dc)))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    by_op = defaultdict(list)
+    for k, r in enumerate(dc):
+        by_op[r["op"]].append(k)
+    cdeg = PARK_LINK_M / 111320 * 1.7  # Zellgröße in Grad, großzügig für Längengrad
+    for ks in by_op.values():
+        cells = defaultdict(list)
+        for k in ks:
+            cells[(int(dc[k]["lat"] // cdeg), int(dc[k]["lon"] // cdeg))].append(k)
+        for (ci, cj), members in cells.items():
+            for di in (-1, 0, 1):
+                for dj in (-1, 0, 1):
+                    for k2 in cells.get((ci + di, cj + dj), ()):
+                        for k in members:
+                            if k < k2 and haversine(dc[k]["lat"], dc[k]["lon"], dc[k2]["lat"], dc[k2]["lon"]) <= PARK_LINK_M:
+                                ra, rb = find(k), find(k2)
+                                if ra != rb:
+                                    parent[max(ra, rb)] = min(ra, rb)
+    groups = defaultdict(list)
+    for k in range(len(dc)):
+        groups[find(k)].append(k)  # dc ist nach Datum sortiert -> erstes Element = Gründung
+    ort_names, ort_idx = [], {}
+    parks = sorted((sorted(g) for g in groups.values()), key=lambda g: g[0])
+
     def dist_out(v):
         return -1 if v is None else int(round(v))
 
@@ -166,8 +201,21 @@ def main(path, out):
         lp=[r["lp"] for r in dc],
         bl=[r["bl"] for r in dc],
         op=[op_idx[r["op"]] for r in dc],
-        da=[dist_out(r["da"]) for r in dc],
-        dh=[dist_out(r["dh"]) for r in dc],
+    )
+    # Abstand eines Parks = Abstand seiner ersten Einrichtung zur nächsten älteren
+    # DC-Einrichtung. Eigene spätere Erweiterungen sind dadurch automatisch ausgeschlossen.
+    park_out = dict(
+        m=[dc[g[0]]["m"] for g in parks],
+        lat=[round(dc[g[0]]["lat"] * 1e4) for g in parks],
+        lon=[round(dc[g[0]]["lon"] * 1e4) for g in parks],
+        op=[op_idx[dc[g[0]]["op"]] for g in parks],
+        bl=[dc[g[0]]["bl"] for g in parks],
+        ort=[idx(ort_idx, ort_names, dc[g[0]]["ort"]) for g in parks],
+        lp=[sum(dc[k]["lp"] for k in g) for g in parks],
+        kw=[round(max(dc[k]["kw"] for k in g)) for g in parks],
+        n=[len(g) for g in parks],
+        da=[dist_out(dc[g[0]]["da"]) for g in parks],
+        dh=[dist_out(dc[g[0]]["dh"]) for g in parks],
     )
 
     # --- AC: Monatsaggregate und ausgedünnte Punkte für die Karte -----------
@@ -229,10 +277,13 @@ def main(path, out):
             baseYear=BASE_YEAR,
             hpcKw=HPC_KW,
             nRows=len(rows),
+            parkLinkM=PARK_LINK_M,
         ),
         bl=bl_names,
         op=op_names,
         dc=dc_out,
+        parks=park_out,
+        ort=ort_names,
         acAgg=ac_agg,
         acDots=ac_dots,
         cov=cov,
@@ -240,7 +291,7 @@ def main(path, out):
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         json.dump(out_obj, f, ensure_ascii=False, separators=(",", ":"))
-    print(f"{len(rows)} Ladeeinrichtungen, {len(dc)} DC, {len(ac_dots['m'])} AC-Punkte, "
+    print(f"{len(rows)} Ladeeinrichtungen, {len(dc)} DC, {len(parks)} Ladeparks, {len(ac_dots['m'])} AC-Punkte, "
           f"{len(cells)} Rasterzellen -> {out} ({os.path.getsize(out) / 1e6:.1f} MB)")
 
 

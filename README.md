@@ -7,7 +7,9 @@ Statische Seite ohne Build-Schritt: HTML, CSS, D3.js (lokal eingebunden) und ein
 ## Inhalt
 
 - **Kennzahlen**: Ladepunkte gesamt, DC-Ladepunkte, DC-Ladeleistung, Median-Abstand neuer DC-Punkte
-- **Abstand je Quartal**: Median und mittlere 50 % der Distanz neuer DC-Ladepunkte zur nächsten älteren DC-Ladeeinrichtung
+- **Abstand je Quartal**: Median und mittlere 50 % der Distanz neuer DC-Ladeparks zum bestehenden DC-Netz
+- **Betreiber-Ranking**: die 15 größten DC-Betreiber nach Anteil neuer Parks in der Fläche (> 2 km)
+- **Top 10 „Pampa“**: Parks ≥ 300 kW und ≥ 4 LP mit dem größten Abstand bei Eröffnung
 - **Klassenanteile je Jahr**: Erweiterung (< 300 m), Verdichtung (0,3–2 km), Lückenschluss (2–10 km), neue Fläche (> 10 km)
 - **Karte** mit Zeitraffer des Ausbaus
 - **Versorgungsdistanz**: Entfernung von bewohnten 5-km-Rasterzellen zum nächsten DC-Lader je Jahresende
@@ -41,7 +43,8 @@ Dann http://localhost:8000 öffnen. Direktes Öffnen der `index.html` per Doppel
 ## Methodik und Grenzen
 
 - DC = Ladeeinrichtung mit mindestens einem DC-Stecker (CCS, CHAdeMO, MCS).
-- Abstand = Luftlinie (Haversine) zur nächsten DC-Ladeeinrichtung mit strikt früherem Inbetriebnahmedatum. Gewichtung nach Anzahl Ladepunkte.
+- Ladepark = DC-Einrichtungen desselben Betreibers mit höchstens 200 m Abstand (verkettet).
+- Abstand eines Parks = Luftlinie (Haversine) von seiner ersten Einrichtung zur nächsten DC-Einrichtung mit strikt früherem Inbetriebnahmedatum. Eigene spätere Erweiterungen zählen nicht, jeder Park zählt einmal.
 - Das Register enthält nur aktuell betriebene, vollständig gemeldete Einrichtungen. Abgebaute Säulen fehlen (Survivorship), jüngste Monate sind wegen Meldeverzug unvollständig.
 
 ## Lizenzen
