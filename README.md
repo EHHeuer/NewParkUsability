@@ -19,12 +19,15 @@ Filter: Bundesland, Leistungsklasse, Referenznetz (alle DC oder nur ≥ 150 kW),
 
 ## Daten aktualisieren
 
+Den aktuellen Link findet man auf der [Seite zur Ladesäulenkarte](https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/E-Mobilitaet/Ladesaeulenkarte/start.html). Neuere Stände gibt es teils nur noch als Excel-Datei, die zuerst in CSV umgewandelt wird (braucht `pip install openpyxl`):
+
 ```bash
-curl -O https://data.bundesnetzagentur.de/Bundesnetzagentur/DE/Fachthemen/ElektrizitaetundGas/E-Mobilitaet/Ladesaeulenregister_BNetzA_2026-09-01.csv
-python3 scripts/build_data.py Ladesaeulenregister_BNetzA_2026-09-01.csv
+curl -O https://data.bundesnetzagentur.de/Bundesnetzagentur/DE/Fachthemen/ElektrizitaetundGas/E-Mobilitaet/Ladesaeulenregister_BNetzA_2026-09-30.xlsx
+python3 scripts/xlsx_to_csv.py Ladesaeulenregister_BNetzA_2026-09-30.xlsx
+python3 scripts/build_data.py Ladesaeulenregister_BNetzA_2026-09-30.csv
 ```
 
-Das Skript nutzt nur die Python-Standardbibliothek (ab 3.9) und schreibt `public/data/lsr.json`. Laufzeit rund 30 Sekunden.
+Liegt der Stand als CSV vor, entfällt der mittlere Schritt. `build_data.py` nutzt nur die Python-Standardbibliothek (ab 3.9) und schreibt `public/data/lsr.json`. Laufzeit rund 30 Sekunden.
 
 ## Lokal ansehen
 

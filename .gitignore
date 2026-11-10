@@ -2,3 +2,4 @@
 __pycache__/
 public/**/*.gz
 .DS_Store
+*.xlsx
